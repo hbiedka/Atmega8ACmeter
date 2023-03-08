@@ -11,8 +11,10 @@ signed int zeroPoint = 512;
 unsigned long sumSquares = 0;
 unsigned int numSqTicks = 0;
 
-//LED last state
-bool st = false;
+//impulse LED
+unsigned long long ledOffTime = 0;
+unsigned long miliAmpSecs = 0;
+#define MAS_IMPULSE 1000 //pulse every 1000 miliampereseconds (1 A in second)
 
 // clock buffers
 unsigned long long read_clock_buf = 0;
@@ -22,9 +24,17 @@ void setup() {
   pinMode(10, OUTPUT);
 
   Serial.begin(9600);
+
+  analogReference(INTERNAL);
 }
 
 void loop() {
+
+  //if LED on and need to be reset
+  if (ledOffTime > 0 && ledOffTime < millis()) {
+    digitalWrite(10,LOW);
+    ledOffTime = 0;
+  }
 
   //every 1 s
   if (millis() > calc_rms_buf+1000) {
@@ -32,17 +42,27 @@ void loop() {
     //calculate RMS
 
     unsigned long meanSquare = numSqTicks > 0 ? sumSquares/numSqTicks : 0; //prevent div by zero
-    unsigned int RMS = sqrt(meanSquare);
+    unsigned int RMS = sqrt(meanSquare)*TO_MILIAMPS;
 
-    Serial.println(RMS*TO_MILIAMPS);
+    Serial.println(RMS);
     
     //restart counters
     sumSquares=0;
     numSqTicks=0;
 
-    //diode
-    digitalWrite(10,st);
-    st = !st;
+    //integrate to pulse diode
+    miliAmpSecs += RMS;
+    if (miliAmpSecs >= MAS_IMPULSE) {
+      
+      //impulse LED once
+      digitalWrite(10,HIGH);
+
+      //set time to turn LED off
+      ledOffTime = millis()+100;
+
+      //restart counter
+      miliAmpSecs = 0;
+    }
   }
 
   //every 1 ms
